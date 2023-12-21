@@ -1,0 +1,13 @@
+.idea
+.logs/*
+public/
+vendor/
+local/
+local-dev/
+cache/
+import/import-configuration.json
+.env
+.env.cached.php
+*.swp
+.DS_Store
+.env.example

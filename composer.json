@@ -1,0 +1,46 @@
+{
+    "name": "netzberufler/interactive-website",
+    "type": "project",
+    "description": "Interactive Block Development sandbox",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "php": ">=8.0",
+        "composer/installers": "^2.2",
+        "wecodemore/wpstarter": "^3",
+        "roots/wordpress": ">=6.4",
+        "wpackagist-theme/twentytwentythree": "1.*",
+        "netzberufler/interactive-accordion-block": "dev-main"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "allow-plugins": {
+            "composer/installers": true,
+            "wecodemore/wpstarter": true,
+            "roots/wordpress-core-installer": true
+        }
+    },
+    "extra": {
+        "wordpress-content-dir": "public/wp-content",
+        "wordpress-install-dir": "public/wp",
+        "installer-paths": {
+            "public/wp-content/themes/{$name}": [
+                "type:wordpress-theme"
+            ],
+            "public/wp-content/plugins/{$name}": [
+                "type:wordpress-plugin"
+            ]
+        },
+        "wpstarter": {
+            "content-dev-dir" : "./content-dev",
+            "db-check": "health"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://wpackagist.org"
+        }
+    ]
+}
