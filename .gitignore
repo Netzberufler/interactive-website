@@ -1,6 +1,7 @@
 .idea
 .logs/*
 public/
+packages/
 vendor/
 local/
 local-dev/

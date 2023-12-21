@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_DIR=/var/www/html
+PROJECT_DIR_LEN=${#PROJECT_DIR}+1
+ARGV=("$@")
+
+CYAN=""
+BLUE=""
+CC="" # clear color
+
+# Color output only on interactive terminals (not when the command is piped)
+if [[ -t 1 ]]; then
+    CYAN="\033[0;36m"
+    BLUE="\033[0;34m"
+    CC="\033[0m" # clear color
+fi
+
+hasOption(){
+    local ARG
+    for ARG in "${ARGV[@]}"; do
+        [[ "$1" = "$ARG" ]] && return 0
+    done
+
+    return 1
+}
+
+readarray -t PACKAGE_DIRS < <(
+    while read -r LINE; do
+        # Composer output looks like
+        # acme/package /project/vendor/acme/package
+        echo ${LINE#* };
+    done < <(pushd "$PROJECT_DIR" || exit 1; composer show -P; popd || exit 1)
+)
+
+isProjectPath(){
+    local PACKAGE_DIR
+    for PACKAGE_DIR in "${PACKAGE_DIRS[@]}"; do
+        [[ "$1" = "$PACKAGE_DIR" ]] && return 0
+    done
+
+    return 1
+}
+
+while IFS= read -r -d '' LINK
+do
+    REALPATH=$(realpath "$LINK")
+    # Composer already resolves the realpath even if it is symlinked
+    isProjectPath "$REALPATH" || continue
+    RELATIVE_LINK=${LINK:$PROJECT_DIR_LEN}
+    PKG_NAME=${RELATIVE_LINK##*/}
+    RELATIVE_LINK_DIR=${RELATIVE_LINK%/*}
+    if hasOption "--target-only"; then
+        echo -e "${BLUE}${REALPATH}${CC}"
+    else
+        echo -e "${RELATIVE_LINK_DIR}/${CYAN}${PKG_NAME}${CC} -> ${BLUE}${REALPATH}${CC}"
+    fi
+
+done < <(find "$PROJECT_DIR/vip" -type l -print0)
+
+

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+##
+# This script shows you the current branch of all git repositories
+# inside packages/*
+# output is
+# PACKAGE CURRENT-BRANCH STATUS (clean/local-changes)
+#
+
+set -euo pipefail
+
+BLUE=""
+CYAN=""
+RED=""
+CC="" # clear color
+
+# Color output only on interactive terminals (not when the command is piped)
+if [[ -t 1 ]]; then
+    BLUE="\033[0;34m"
+    CYAN="\033[0;36m"
+    RED="\033[0;31m"
+    CC="\033[0m" # clear color
+fi
+
+while IFS= read -r -d '' PACKAGE; do
+    [[ ! -d "${PACKAGE}/.git" ]] && continue
+
+        if [[ '' == $(git -C "$PACKAGE" status -s) ]]; then
+            STATUS='clean'
+        else
+            STATUS="${RED}local-changes${CC}"
+        fi
+
+        CURRENT_BRANCH=$(git -C "$PACKAGE" branch --show-current)
+        if [[ "$CURRENT_BRANCH" == '' ]]; then
+            CURRENT_BRANCH=$(git -C "$PACKAGE" describe --tags)
+        fi
+
+        echo -e "${BLUE}$(basename $PACKAGE)${CC}: ${CYAN}${CURRENT_BRANCH}${CC} $STATUS"
+done < <(find /var/www/html/packages/* -maxdepth 0 -type d -print0)

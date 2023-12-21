@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_DIR="/var/www/html"
+ARGV=("$@")
+
+CYAN=""
+CC="" # clear color
+
+# Color output only on interactive terminals (not when the command is piped)
+if [[ -t 1 ]]; then
+    CYAN="\033[0;36m"
+    CC="\033[0m" # clear color
+fi
+
+hasOption(){
+    local ARG
+    for ARG in "${ARGV[@]}"; do
+        [[ "$1" = "$ARG" ]] && return 0
+    done
+
+    return 1
+}
+
+maybePrintHelp(){
+    hasOption "--help" || return 0
+    cat <<HELP
+Script to remove symlinks from composer install directories to packages/*
+
+Usage
+
+    unlink-packages [--help|--dry-run]
+
+Options
+
+    --dry-run       just show link names that would be deleted
+
+    --help          print this help message
+HELP
+
+    exit
+}
+
+maybePrintHelp
+
+DELETED="0"
+for LINK in $(ls-symlinks | awk '{print $1}'); do
+    LINK="$PROJECT_DIR/$LINK"
+    [[ -L "$LINK" ]] || { echo -e "Skip ${CYAN}${LINK}${CC} as it seems to be no link"; continue; }
+
+    hasOption "--dry-run" && { echo -e "Would delete ${CYAN}${LINK}${CC}"; continue; }
+
+    echo -e "Deleting ${CYAN}${LINK}${CC}"
+    rm "$LINK"
+    [[ "$DELETED" = "0" ]] && DELETED="1"
+done
+
+[[ "$DELETED" = "1" ]] && echo "Remember to run composer install"

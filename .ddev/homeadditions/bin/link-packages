@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+shopt -s nullglob
+
+PROJECT_DIR=/var/www/html
+PACKAGES_DIR=$PROJECT_DIR/packages
+ARGV=("$@")
+
+CYAN=""
+BLUE=""
+CC="" # clear color
+
+# Color output only on interactive terminals (not when the command is piped)
+if [[ -t 1 ]]; then
+    CYAN="\033[0;36m"
+    BLUE="\033[0;34m"
+    CC="\033[0m" # clear color
+fi
+
+maybePrintHelp() {
+    local ARG
+    for ARG in "${ARGV[@]}"; do if [[ "$ARG" = '--help' ]]; then
+        cat <<HELP
+Script to create symlinks from composer install directories to packages/*
+for packages that are part of the project's composer.lock file.
+
+Usage
+
+    link-packages [package-name[ package-name[...]]] [--help]
+
+Options
+
+    package-name    name of the package directory (without the vendor name)
+
+    --help          print this help message
+
+Examples
+
+    link-packages swissinfo-orm swissinfo-api
+
+        This will link only the mentioned packages
+
+    link-packages
+
+        Links all packages that are found in
+
+Description
+
+    The script works by iterating over all directories in packages/ looking for a composer.json.
+    If the name of the package is installed in the root project, the original installation path gets
+    replaced with a symlinks pointing to packages/{PACKAGE_NAME}
+HELP
+    exit
+    fi; done
+}
+
+maybePrintHelp
+
+silent(){
+    "$@" > /dev/null 2>&1
+}
+
+projectHasPackage(){
+    silent pushd $PROJECT_DIR
+    silent composer why "$@" || { silent popd; return 1; }
+    silent popd
+
+    return 0
+}
+
+# Check if arguments given that does not look like options --lorem or -f
+argContainsAnyPackage(){
+    local ARG
+    for ARG in "${ARGV[@]}"; do
+        [[ "$ARG" =~ ^- ]] || return 0
+    done
+    return 1
+}
+
+argContainsPackage(){
+    local ARG
+    for ARG in "${ARGV[@]}"; do
+        [[ "$ARG" = "$1" ]] && return 0
+    done
+
+    return 1
+}
+
+for PKG_SRC_DIR in "$PACKAGES_DIR"/* ; do
+
+    # no composer.json, not relevant
+    [[ -f "$PKG_SRC_DIR"/composer.json ]] || continue
+
+    PKG_NAME=$(jq -r '.name' "$PKG_SRC_DIR/composer.json")
+    PKG_BASENAME=${PKG_NAME##*/}
+
+    argContainsAnyPackage && { argContainsPackage "$PKG_BASENAME" ||  continue; }
+
+    silent pushd $PROJECT_DIR
+    silent composer why "$PKG_NAME" || { silent popd; continue; }
+    PKG_INSTALL_DIR=$(composer show "$PKG_NAME" --path | awk '{print $2}')
+    silent popd
+
+
+    # composer show --path already resolves symlinks
+    if [[ "$PKG_INSTALL_DIR" = "$PKG_SRC_DIR" ]]; then
+        echo -e "Package ${BLUE}${PKG_NAME}${CC} linked already"
+        continue
+    fi
+
+    if [[ ! -d "$PKG_INSTALL_DIR" ]]; then
+        echo -e "Package ${BLUE}${PKG_NAME}${CC} seems not to be installed. You should run composer install"
+        continue
+    else
+        echo -e "Removing ${BLUE}${PKG_INSTALL_DIR}${CC}"
+        rm -rf "$PKG_INSTALL_DIR"
+    fi
+
+    echo -e "Linking ${BLUE}${PKG_INSTALL_DIR}${CC} to ${CYAN}${PKG_SRC_DIR}${CC}"
+    ln -s "$PKG_SRC_DIR" "$PKG_INSTALL_DIR"
+
+done

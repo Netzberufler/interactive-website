@@ -1,0 +1,99 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_DIR="/var/www/html"
+ARGV=("$@")
+
+CYAN=""
+BLUE=""
+CC="" # clear color
+
+# Color output only on interactive terminals (not when the command is piped)
+if [[ -t 1 ]]; then
+    CYAN="\033[0;36m"
+    BLUE="\033[0;34m"
+    CC="\033[0m" # clear color
+fi
+
+silent(){
+    "$@" > /dev/null 2>&1
+}
+
+hasOption(){
+    local ARG
+    for ARG in "${ARGV[@]}"; do
+        [[ "$1" = "$ARG" ]] && return 0
+    done
+
+    return 1
+}
+
+maybePrintHelp(){
+    hasOption "--help" || return 0
+    cat <<HELP
+Script to set git status of packages/* to the one required by composer
+
+Usage
+
+    pkg-sync [--help]
+
+Options
+
+
+    --help   print this help message
+HELP
+
+    exit
+}
+
+maybePrintHelp
+
+for PKG_SRC_DIR in $(ls-symlinks --target-only); do
+
+    # no composer.json, not relevant
+    [[ -f "$PKG_SRC_DIR"/composer.json ]] || continue
+
+    PKG_NAME=$(jq -r '.name' "$PKG_SRC_DIR/composer.json")
+
+    silent pushd $PROJECT_DIR
+    silent composer why "$PKG_NAME" || { silent popd; continue; }
+    PKG_VERSION=$(composer show "$PKG_NAME" --format=json | jq -r .versions[0])
+    silent popd
+
+    VERSION_IS_BRANCH="0"
+    if [[ "$PKG_VERSION" =~ ^dev- ]]; then
+        PKG_VERSION=${PKG_VERSION##dev-}
+        VERSION_IS_BRANCH="1"
+    fi
+
+    hasOption "--dry-run" && {
+        echo -e "Would set repo ${BLUE}${PKG_SRC_DIR}${CC} to ref ${CYAN}${PKG_VERSION}${CC}";
+        continue;
+    }
+
+    CURRENT_BRANCH=$(git -C "$PKG_SRC_DIR" branch --show-current)
+
+    if [[ '' == $(git -C "$PKG_SRC_DIR" status -s) && "$CURRENT_BRANCH" != '' ]]; then
+
+        if [[ "$CURRENT_BRANCH" == "$PKG_VERSION" && "$VERSION_IS_BRANCH" == "1" ]]; then
+            echo -e "Package ${CYAN}${PKG_NAME}${CC} already on version ${BLUE}${PKG_VERSION}${CC}. Fetching updates..."
+            git -C "$PKG_SRC_DIR" pull origin "$PKG_VERSION"
+            continue;
+        fi
+
+        echo -e "Update remote for ${CYAN}${PKG_NAME}${CC}"
+        git -C "$PKG_SRC_DIR" remote update
+        if [[ "$VERSION_IS_BRANCH" == 1 ]]; then
+            echo -e "Switch to branch ${CYAN}${PKG_VERSION}${CC}"
+            git -C "$PKG_SRC_DIR" switch "$PKG_VERSION"
+        else
+            echo -e "Check out version ${CYAN}${PKG_VERSION}${CC}"
+            git -C "$PKG_SRC_DIR" checkout "$PKG_VERSION"
+        fi
+    else
+        echo -e "${RED}Working directory contains local changes or is in detached head state. Skip pull for $(basename "$PKG_SRC_DIR")${CC}"
+    fi
+
+done
+
